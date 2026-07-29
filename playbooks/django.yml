@@ -1,0 +1,10 @@
+---
+- name: Install Django with NGINX web-server
+  hosts: "localhost"
+  roles:
+    - base
+    - nginx
+    - django
+    - postgresql
+    - sftp
+    - fail2ban

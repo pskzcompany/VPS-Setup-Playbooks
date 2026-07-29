@@ -1,0 +1,64 @@
+---
+- name: Update and upgrade all packages
+  ansible.builtin.apt:
+    upgrade: safe
+    update_cache: true
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: "{{ base_packages_list }}"
+    state: present
+
+- name: Install debian base packages
+  ansible.builtin.apt:
+    name: "{{ base_debian_packages_list }}"
+    state: present
+
+- name: Configure ufw defaults
+  community.general.ufw:
+    direction: "{{ item.direction }}"
+    policy: "{{ item.policy }}"
+  with_items:
+    - direction: 'incoming'
+      policy: 'deny'
+    - direction: 'outgoing'
+      policy: 'allow'
+  notify:
+    - Restart ufw
+
+- name: Configure ufw rules
+  community.general.ufw:
+    rule: limit
+    port: 22
+    proto: tcp
+
+- name: Enable ufw
+  ansible.builtin.service:
+    name: ufw
+    state: started
+    enabled: true
+
+- name: Ensure chrony is running and enabled
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
+
+- name: Enable and start rsyslog service
+  ansible.builtin.service:
+    name: "rsyslog"
+    enabled: true
+    state: started
+
+- name: Enable log compression in Logrotate
+  ansible.builtin.replace:
+    path: /etc/logrotate.conf
+    regexp: "^(#)?compress$"
+    replace: "compress"
+
+- name: Duplicate jail.conf as jail.local and push key parameters
+  ansible.builtin.copy:
+    src: jail.local
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+  notify: Enable and start fail2ban

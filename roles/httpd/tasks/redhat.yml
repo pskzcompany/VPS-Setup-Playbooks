@@ -1,0 +1,69 @@
+---
+- name: Install Httpd And Firewall Packages
+  ansible.builtin.dnf:
+    name:
+      - httpd
+      - mod_ssl
+      - firewalld
+    state: present
+
+- name: Ensure Firewalld Is Enabled And Started
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+  when:
+    - httpd_manage_firewall
+    - not (httpd_skip_firewall_in_containers and ansible_virtualization_type in ['docker', 'containerd', 'podman', 'lxc'])
+
+- name: Enable http(s) on firewall-cmd
+  ansible.posix.firewalld:
+    service: "{{ item }}"
+    state: enabled
+    permanent: true
+    immediate: true
+    zone: public
+  loop:
+    - http
+    - https
+  when:
+    - httpd_manage_firewall
+    - not (httpd_skip_firewall_in_containers and ansible_virtualization_type in ['docker', 'containerd', 'podman', 'lxc'])
+
+- name: Check if nginx is already installed
+  ansible.builtin.stat:
+    path: /etc/nginx
+  register: _httpd_nginx_check
+
+- name: Ensure the default Apache port is 8080
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf/httpd.conf
+    regexp: '^Listen '
+    insertafter: '^#Listen '
+    line: Listen 8080
+  notify: Restart httpd
+  when: _httpd_nginx_check.stat.exists
+
+- name: Add vhost config
+  ansible.builtin.template:
+    src: vhost.j2
+    dest: /etc/httpd/conf.d/{{ httpd_domain }}.conf
+    mode: "0644"
+  notify: Restart httpd
+
+- name: Ensure the default Apache site port is 8080
+  ansible.builtin.lineinfile:
+    path: /etc/httpd/conf.d/{{ httpd_domain }}.conf
+    regexp: '^<VirtualHost'
+    line: '<VirtualHost 127.0.0.1:8080>'
+  notify: Restart httpd
+  when: _httpd_nginx_check.stat.exists
+
+- name: Create /var/www vhost subdir
+  ansible.builtin.file:
+    state: directory
+    path: /var/www/{{ httpd_domain }}/
+    owner: apache
+    group: apache
+    mode: "0755"
+  notify: Restart httpd

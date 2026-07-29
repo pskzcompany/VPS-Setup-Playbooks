@@ -1,0 +1,12 @@
+---
+- name: Install LAMP stack
+  become: true
+  hosts: "localhost"
+  roles:
+    - base
+    - httpd
+    - php
+    - mariadb
+    - phpmyadmin
+    - sftp
+    - fail2ban

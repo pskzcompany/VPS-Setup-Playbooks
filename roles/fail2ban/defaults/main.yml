@@ -1,2 +1,7 @@
 ---
-# defaults file for roles/fail2ban
+fail2ban_debian_packages:
+  - fail2ban
+  - iptables-persistent
+
+fail2ban_redhat_packages:
+  - fail2ban

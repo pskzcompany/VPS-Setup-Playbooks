@@ -1,22 +1,33 @@
 ---
-- name: Enable ssh on ufw
-  ufw:
+- name: Install Ufw Package
+  ansible.builtin.apt:
+    name: ufw
+    state: present
+    update_cache: true
+  when:
+    - sftp_manage_firewall
+    - not (sftp_skip_firewall_in_containers and ansible_virtualization_type in ['docker', 'containerd', 'podman', 'lxc'])
+
+- name: Enable Ssh On Ufw
+  community.general.ufw:
     rule: allow
     port: ssh
     proto: tcp
+  when:
+    - sftp_manage_firewall
+    - not (sftp_skip_firewall_in_containers and ansible_virtualization_type in ['docker', 'containerd', 'podman', 'lxc'])
 
-- name: Create site user
-  user:
-    name: "{{ short_vhost }}"
-    uid: 33
-    group: www-data
-    non_unique: yes
+- name: Create Site User
+  ansible.builtin.user:
+    name: "{{ sftp_site_username }}"
+    groups:
+      - "{{ sftp_debian_group }}"
     password: "{{ lookup('password', '/root/01-sftp_password chars=ascii_letters,digits,hexdigits length=15') | password_hash('sha512') }}"
     shell: /usr/sbin/nologin
-    home: /var/www/
+    home: "{{ sftp_home_dir }}"
 
-- name: Insert site user name into user password file
-  blockinfile:
+- name: Insert Site User Name Into User Password File
+  ansible.builtin.blockinfile:
     dest: /root/01-sftp_password
     insertbefore: BOF
     block: |
@@ -24,42 +35,34 @@
       ip-адрес: {{ ansible_default_ipv4.address }}
       Тип подключений: SFTP
       Порт: 22
-      Папка сайта: /var/www/{{ vhost }}
-      Пользователь: {{ short_vhost }}
+      Папка сайта: {{ sftp_home_dir }}/{{ vhost }}
+      Пользователь: {{ sftp_site_username }}
 
-- name: Add sshd user part
-  blockinfile:
+- name: Add Sshd User Part
+  ansible.builtin.blockinfile:
     marker: ''
     path: /etc/ssh/sshd_config
     insertafter: EOF
     block: |
-      Match User {{ short_vhost }}
+      Match User {{ sftp_site_username }}
       ForceCommand internal-sftp
       PasswordAuthentication yes
       PermitTunnel no
       AllowAgentForwarding no
       AllowTcpForwarding no
       X11Forwarding no
-  notify: restart sshd
+  notify: Restart sshd
 
-- name: Change ftp-subsystem
-  lineinfile:
+- name: Change Sftp Subsystem
+  ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^Subsystem'
     line: 'Subsystem       sftp    internal-sftp'
-  notify: restart sshd
+  notify: Restart sshd
 
 - name: Disable UsePAM
-  lineinfile:
+  ansible.builtin.lineinfile:
     path: /etc/ssh/sshd_config
     regexp: '^UsePAM'
     line: '#UsePAM'
-  notify: restart sshd
-
-- name: Change /var/www group and perm
-  file:
-    state: directory
-    path: /var/www
-    owner: root
-    group: www-data
-    mode: 0775
+  notify: Restart sshd

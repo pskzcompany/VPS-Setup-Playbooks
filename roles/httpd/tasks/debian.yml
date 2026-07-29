@@ -1,0 +1,65 @@
+---
+- name: Check if nginx is already installed
+  ansible.builtin.stat:
+    path: /etc/nginx
+  register: _httpd_nginx_check
+
+- name: Install Apache2 And Ufw Packages
+  ansible.builtin.apt:
+    name:
+      - apache2
+      - ufw
+    state: present
+    update_cache: true
+
+- name: Enable Http(s) On Ufw
+  community.general.ufw:
+    state: enabled
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop:
+    - http
+    - https
+  when:
+    - httpd_manage_firewall
+    - not (httpd_skip_firewall_in_containers and ansible_virtualization_type in ['docker', 'containerd', 'podman', 'lxc'])
+
+- name: Change Apache listening port to 8080 if NGINX is present
+  ansible.builtin.lineinfile:
+    path: /etc/apache2/ports.conf
+    regexp: '^Listen '
+    line: 'Listen 8080'
+  when: _httpd_nginx_check.stat.exists
+  notify: Restart apache2
+
+- name: Add vhost config
+  ansible.builtin.template:
+    src: vhost.j2
+    dest: "/etc/apache2/sites-available/{{ httpd_domain }}.conf"
+    mode: "0644"
+  notify: Restart apache2
+
+- name: Ensure Apache vhost uses correct address and port
+  ansible.builtin.lineinfile:
+    path: "/etc/apache2/sites-available/{{ httpd_domain }}.conf"
+    regexp: "^<VirtualHost"
+    line: >-
+      <VirtualHost {% if _httpd_nginx_check.stat.exists %}127.0.0.1:8080{% else %}*:80{% endif %}>
+  notify: Restart apache2
+
+- name: Create vhost symlink
+  ansible.builtin.file:
+    state: link
+    path: "/etc/apache2/sites-enabled/{{ httpd_domain }}.conf"
+    src: "/etc/apache2/sites-available/{{ httpd_domain }}.conf"
+  notify: Restart apache2
+
+- name: Create /var/www vhost subdir
+  ansible.builtin.file:
+    state: directory
+    path: "/var/www/{{ httpd_domain }}/"
+    owner: www-data
+    group: www-data
+    mode: "0755"
+  notify: Restart apache2

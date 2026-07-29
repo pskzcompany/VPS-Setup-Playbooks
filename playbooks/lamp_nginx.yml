@@ -1,0 +1,12 @@
+---
+- name: Install LAMP stack with NGINX reverse proxy
+  hosts: "localhost"
+  roles:
+    - base
+    - nginx
+    - httpd
+    - php
+    - mariadb
+    - phpmyadmin
+    - sftp
+    - fail2ban

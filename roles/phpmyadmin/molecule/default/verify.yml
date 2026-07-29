@@ -1,0 +1,23 @@
+---
+- name: Verify
+  hosts: all
+  tasks:
+    - name: Check PhpMyAdmin Config Exists
+      ansible.builtin.stat:
+        path: /usr/share/phpmyadmin/config.inc.php
+      register: phpmyadmin_config
+
+    - name: Fail When PhpMyAdmin Config Is Missing
+      ansible.builtin.fail:
+        msg: "/usr/share/phpmyadmin/config.inc.php was not created"
+      when: not phpmyadmin_config.stat.exists
+
+    - name: Check PhpMyAdmin Credentials File Exists
+      ansible.builtin.stat:
+        path: /root/02-pma_password
+      register: phpmyadmin_password_file
+
+    - name: Fail When PhpMyAdmin Credentials File Is Missing
+      ansible.builtin.fail:
+        msg: "/root/02-pma_password was not created"
+      when: not phpmyadmin_password_file.stat.exists

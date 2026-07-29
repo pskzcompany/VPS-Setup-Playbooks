@@ -1,0 +1,72 @@
+---
+- name: Install epel-release
+  ansible.builtin.dnf:
+    name: epel-release
+    state: present
+
+- name: Install base packages
+  ansible.builtin.dnf:
+    name: "{{ base_packages_list }}"
+    state: present
+    update_cache: true
+
+- name: Install centos base packages
+  ansible.builtin.dnf:
+    name: "{{ base_redhat_packages_list }}"
+    state: present
+    update_cache: true
+
+- name: Ensure firewalld started
+  ansible.builtin.service:
+    name: firewalld
+    state: started
+    enabled: true
+
+- name: Open SSH firewall port
+  ansible.posix.firewalld:
+    service: ssh
+    permanent: true
+    immediate: true
+    state: enabled
+
+- name: Ensure chronyd is started and enabled
+  ansible.builtin.service:
+    name: chronyd
+    state: started
+    enabled: true
+
+- name: Enable service rsyslog
+  ansible.builtin.service:
+    name: "rsyslog"
+    enabled: "yes"
+    state: "started"
+
+- name: Enable Log Compressing
+  ansible.builtin.replace:
+    dest: /etc/logrotate.conf
+    regexp: "^(#)?compress$"
+    replace: "compress"
+
+- name: Check if powertools repo is enabled
+  command: dnf repolist enabled
+  register: repolist
+  changed_when: false
+
+- name: Enable powertools repo
+  command: dnf config-manager --set-enabled powertools
+  when:
+    - ansible_facts['distribution_major_version']|int < 9
+    - "'powertools' not in repolist.stdout"
+
+- name: Ensure the crb repository is enabled
+  ansible.builtin.command: dnf config-manager --set-enabled crb
+  when:
+    - ansible_facts['distribution_major_version'] >= "9"
+    - "'crb' not in repolist.stdout"
+
+- name: Duplicate jail.conf as jail.local and push key parameters
+  ansible.builtin.copy:
+    src: jail.local
+    dest: /etc/fail2ban/jail.local
+    mode: "0644"
+  notify: Enable and start fail2ban

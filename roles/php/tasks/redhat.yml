@@ -1,0 +1,109 @@
+---
+- name: Add remi repository
+  ansible.builtin.dnf:
+    disable_gpg_check: true
+    name: http://mirror.neolabs.kz/remi/enterprise/remi-release-{{ ansible_distribution_major_version }}.rpm
+    state: present
+
+- name: Disable default AppStream PHP module (RHEL 9)
+  ansible.builtin.shell: |
+    dnf module list php | grep -q '^\[d\]' || dnf module disable php -y
+  when:
+    - ansible_distribution_major_version | int >= 9
+  changed_when: false
+
+- name: Enable Remi PHP
+  ansible.builtin.shell: |
+    dnf module list php | grep -q 'remi-{{ php_default_version }}.*\[e\]' || dnf module enable php:remi-{{ php_default_version }} -y
+  when:
+    - ansible_distribution_major_version | int >= 9
+  changed_when: false
+
+- name: Ensure the powertools repository is enabled
+  community.general.dnf_config_manager:
+    name: powertools
+    state: enabled
+  when:
+  - ansible_facts['distribution_major_version'] < "9"
+
+- name: Ensure the crb repository is enabled
+  community.general.dnf_config_manager:
+    name: crb
+    state: enabled
+  when:
+  - ansible_facts['distribution_major_version'] >= "9"
+
+- name: Install libedit-devel
+  ansible.builtin.dnf:
+    name: libedit-devel
+    enablerepo: PowerTools
+    state: present
+  when: ansible_facts['distribution_major_version'] == "8"
+
+- name: Check if nginx are installed
+  ansible.builtin.stat:
+    path: /etc/nginx
+  register: _php_nginx_check
+
+- name: Set fact that webserver is nginx
+  ansible.builtin.set_fact:
+    __php_webserver_daemon: "nginx"
+  when: _php_nginx_check.stat.exists
+
+- name: Check if httpd are installed
+  ansible.builtin.stat:
+    path: /etc/httpd
+  register: _php_httpd_check
+
+- name: Set fact that webserver is httpd
+  ansible.builtin.set_fact:
+    __php_webserver_daemon: "httpd"
+  when: not _php_nginx_check.stat.exists and _php_httpd_check.stat.exists
+
+- name: Ensure PHP packages are installed.
+  ansible.builtin.dnf:
+    name: "{{ php_redhat_packages }}"
+    state: present
+    enablerepo: remi-safe
+  notify: Restart webserver
+
+- name: Make remi php binary work using php command
+  ansible.builtin.file:
+    state: link
+    src: /opt/remi/php{{ php_default_version_short }}/root/usr/bin/{{ item.source }}
+    dest: /usr/bin/php{{ item.target }}
+  loop:
+    - { source: 'php', target: ''}
+    - { source: 'php-cgi', target: '-cgi'}
+    - { source: 'phar.phar', target: '-phar'}
+  when: ansible_facts['distribution_major_version'] < "9"
+
+- name: Create /var/www/ vhost subdir
+  ansible.builtin.file:
+    state: directory
+    path: /var/www/{{ php_vhost }}/
+    owner: apache
+    group: apache
+    mode: "0755"
+
+- name: Copy index file into virtualhost root
+  ansible.builtin.copy:
+    src: index.php
+    dest: /var/www/{{ php_vhost }}/index.php
+    owner: apache
+    group: apache
+    mode: "0644"
+
+- name: Tune php.ini
+  community.general.ini_file:
+    path: /etc/opt/remi/php{{ php_default_version_short }}/php.ini
+    section: PHP
+    option: "{{ item.options }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+  - { options: 'post_max_size', value: '64M' }
+  - { options: 'upload_max_filesize', value: '64M' }
+  - { options: 'short_open_tag', value: 'On' }
+  - { options: 'cgi.fix_pathinfo', value: '0' }
+  - { options: 'date.timezone', value: 'Asia/Almaty' }

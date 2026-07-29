@@ -1,0 +1,10 @@
+---
+- name: Install NodeJS with NGINX web-server and mongodb
+  hosts: "localhost"
+  roles:
+    - base
+    - nginx
+    - mongodb
+    - nodejs
+    - sftp
+    - fail2ban

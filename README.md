@@ -1,30 +1,42 @@
 ## Initial setup solutions for VPS hosting
-https://www.ps.kz/hosting/vps#free-setup
 
-Supported OS: Ubuntu 18, 20, CentOS 7, 8, Debian 10, 11
+#### Supported and tested on: 
+- Ubuntu 20, 22, 24 
+- RockyLinux 8, 9
+- Debian 11, 12
+- AlmaLinux 8, 9
 
-Supported php-version: 5.6 through 8.1
+#### Playbooks:
+`base`, `fail2ban`, and `sftp` roles are expected to be part of baseline VM setup.
 
-#### Option 1
-Nginx, Apache, MySQL, and mysqladmin bundled together and ready for website deployment.
+- certbot: Installs SSL certificate from Let's Encrypt.
+- django: Installs Django with Postgresql and Nginx web-server.
+- docker: Installs docker.
+- lamp_nginx: Installs LAMP stack with NGINX as a reverse proxy.
+- lamp: Installs LAMP stack: Apache, MySQL, PHP.
+- mean: Installs MEAN stack: MongoDB, Express.js, Angular, NodeJS
+- wordpress: Installs LAMP stack with NGINX as a reverse proxy and deploys latest WordPress engine.
 
-#### Option 1
-Same as option 1 but with php-fpm instead of Apache.
+#### Roles:
 
-#### Option 3
-Email server + Postfixadmin. Maiboxes management availabe via http://server_ip_address/postadmin/ All server access data and db passwords are stored in /root/passwords.txt. To access maiboxes use email clients.
+- base
+- certbot
+- django
+- docker
+- fail2ban
+- httpd
+- mariadb
+- mongodb
+- nginx
+- nodejs
+- php
+- php-fpm
+- phpmyadmin
+- postgresql
+- sftp
+- wordpress
 
-#### Option 4
-Control panel installation: Plesk Panel Latest Stable or ISP Manager 6 Lite Stable Latest
-
-#### Option 5
-Django On Python3 without database.
-
-#### Option 6
-Bitrix Environment https://dev.1c-bitrix.ru/learning/course/index.php?COURSE_ID=37&LESSON_ID=8811
-
-### Things to improve:
-- Separate Let's Encrypt verification dir, instead of web-site root. Reason: site root folder may be changed, which breaks LE verification.
-- Make use of TLS SNI in postfix, switch to postfix 3 on centos 7.
-- Add nginx reload to ubuntu certbot cron task, check the same on other OS.
-- Add nginx SSL lines to webhost config by default. Enable them if cert issue is successful.
+## Development and testing
+- Contribution workflow, Molecule usage, and role/playbook guidelines are in [`CONTRIBUTING.md`](./CONTRIBUTING.md).
+- Run Molecule for all roles with scenarios:
+  - `./extentions/molecule/test-all-roles.sh`

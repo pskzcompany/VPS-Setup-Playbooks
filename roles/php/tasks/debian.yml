@@ -1,0 +1,105 @@
+---
+- name: Install dependencies
+  ansible.builtin.apt:
+    name: gnupg
+    state: present
+
+- name: Add apt-key for ondrej php repo
+  ansible.builtin.apt_key:
+    url: "{{ php_apt_repo_gpg_key }}"
+  when: ansible_facts['distribution'] == "Debian"
+
+- name: Add packages.sury.org/php debian php repo
+  ansible.builtin.apt_repository:
+    update_cache: true
+    repo: "{{ php_sury_repo }}"
+  when: ansible_facts['distribution'] == "Debian"
+
+- name: Add ppa:ondrej/php php ubuntu repo
+  ansible.builtin.apt_repository:
+    update_cache: true
+    repo: ppa:ondrej/php
+  when: ansible_facts['distribution'] == "Ubuntu"
+
+- name: Ensure PHP packages are installed.
+  ansible.builtin.apt:
+    name: "{{ php_debian_packages }}"
+    state: present
+    install_recommends: true
+    update_cache: true
+  register: php_package_install
+  notify: Restart webserver
+
+- name: Check if nginx are installed
+  ansible.builtin.stat:
+    path: /etc/nginx
+  register: _php_nginx_check
+
+- name: Set fact that webserver is nginx
+  ansible.builtin.set_fact:
+    __php_webserver_daemon: "nginx"
+  when: _php_nginx_check.stat.exists
+
+- name: Check if apache2 are installed
+  ansible.builtin.stat:
+    path: /etc/apache2
+  register: _php_apache2_check
+
+- name: Set fact that webserver is apache2
+  ansible.builtin.set_fact:
+    __php_webserver_daemon: "apache2"
+  when: not _php_nginx_check.stat.exists and _php_apache2_check.stat.exists
+
+- name: Disable mpm_event and mpm_worker
+  community.general.apache2_module:
+    state: absent
+    name: "{{ item }}"
+  loop:
+    - mpm_event
+    - mpm_worker
+  notify: Restart webserver
+  when: _php_apache2_check.stat.exists
+
+- name: Enable apache2 mod_rewrite
+  community.general.apache2_module:
+    state: present
+    name: rewrite
+  notify: Restart webserver
+  when: _php_apache2_check.stat.exists
+
+- name: Enable mpm_prefork
+  community.general.apache2_module:
+    state: present
+    name: mpm_prefork
+  notify: Restart webserver
+  when: _php_apache2_check.stat.exists
+
+- name: Tune some php.ini vars
+  community.general.ini_file:
+    path: /etc/php/{{ php_default_version }}/apache2/php.ini
+    section: PHP
+    option: "{{ item.options }}"
+    value: "{{ item.value }}"
+    mode: "0644"
+  loop:
+    - { options: 'post_max_size', value: '64M' }
+    - { options: 'upload_max_filesize', value: '64M' }
+    - { options: 'short_open_tag', value: 'On' }
+    - { options: 'date.timezone', value: 'Asia/Almaty' }
+  notify: Restart webserver
+
+- name: Create /var/www vhost subdir
+  ansible.builtin.file:
+    state: directory
+    path: /var/www/{{ php_vhost }}
+    owner: www-data
+    group: www-data
+    mode: "0755"
+
+- name: Copy index file into virtualhost root
+  ansible.builtin.copy:
+    src: index.php
+    dest: /var/www/{{ php_vhost }}/index.php
+    owner: www-data
+    group: www-data
+    mode: "0644"
